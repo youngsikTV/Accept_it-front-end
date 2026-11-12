@@ -1,0 +1,86 @@
+:root{--ink:#2b2a33;--orange:#f7a846;--sky:#a8d4e6;--red:#d6303d;--bg:#1c2030;--panel:#fbfaf7}
+*{box-sizing:border-box}
+html,body,#root{margin:0;min-height:100%}
+body{background:var(--bg);color:var(--ink);font-family:'Galmuri11','Malgun Gothic','Apple SD Gothic Neo',system-ui,sans-serif;line-height:1.5}
+img{image-rendering:pixelated}
+.app{min-height:100vh;padding:16px 12px 90px}
+.page{max-width:760px;margin:0 auto}
+.card{background:var(--panel);border:4px solid var(--ink);box-shadow:6px 6px 0 rgba(0,0,0,.4);padding:14px}
+.row{display:flex;flex-wrap:wrap;gap:8px;align-items:center}.row.between{justify-content:space-between}
+.err{color:var(--red);font-weight:700}
+small{color:#666}
+.btn{font:inherit;cursor:pointer;background:var(--orange);color:var(--ink);border:3px solid var(--ink);padding:8px 14px;box-shadow:0 4px 0 var(--ink)}
+.btn:active:not(:disabled){transform:translateY(3px);box-shadow:0 1px 0 var(--ink)}
+.btn:disabled{opacity:.45;cursor:not-allowed}
+.btn:focus-visible,input:focus-visible{outline:3px solid #3b6fd4;outline-offset:2px}
+.btn.pro{background:#8db8ff}.btn.con{background:#ff9a9a}.btn.ghost{background:#fff}.btn.big{font-size:1.15rem;padding:12px 24px}
+.top-right{position:fixed;top:12px;right:12px;z-index:50}
+input.text,.chat-input input{font:inherit;padding:10px;border:3px solid var(--ink);background:#fff}
+/* 메인 */
+.hero{text-align:center;padding-top:40px}
+.hero img{width:96px;margin:0 6px}
+.hero h1{font-size:2.8rem;color:var(--orange);margin:8px 0;text-shadow:4px 4px 0 #000;letter-spacing:2px}
+.hero p{color:#cfd5e6}
+.menu{display:flex;flex-direction:column;gap:14px;align-items:center;margin-top:24px}
+/* 팝업 */
+.overlay{position:fixed;inset:0;background:#000a;display:flex;align-items:center;justify-content:center;z-index:100;padding:12px}
+.modal{max-width:520px;width:100%;max-height:85vh;overflow:auto;display:flex;flex-direction:column;gap:10px}
+.tabs{display:flex;gap:6px}.rules{padding-left:20px;margin:0}.rules li{margin-bottom:6px}
+/* 방 설정 */
+.room h3{margin:16px 0 6px}
+.pool{min-height:44px;border:3px dashed #999;padding:6px;background:#fff}
+.zones{display:grid;grid-template-columns:1fr 2fr;gap:10px;margin:10px 0}
+.zone{min-height:96px;border:3px solid var(--ink);padding:8px;background:#fff}.zone h4{margin:0 0 6px}
+.chip{display:inline-block;margin:3px;padding:4px 10px;border:3px solid var(--ink);background:var(--sky)}
+.chip.me{background:var(--orange);cursor:grab}
+.slider{display:block;margin:12px 0}.slider input{width:100%;accent-color:var(--orange)}
+.ready-bar{position:fixed;right:16px;bottom:16px;display:flex;align-items:center;gap:10px;z-index:40;background:var(--panel);border:4px solid var(--ink);padding:8px 12px;box-shadow:4px 4px 0 rgba(0,0,0,.4)}
+.ready-bar .count{font-size:1.4rem;font-weight:700}
+/* 인게임 장면 */
+.scene{position:relative;width:100%;aspect-ratio:4/3.1;overflow:hidden;border:4px solid var(--ink);background:#c9ced8}
+.scene>div{position:absolute}
+.ceiling{left:0;right:0;top:0;height:11%;background:repeating-linear-gradient(90deg,#d9dde4 0 38px,#aab0bc 38px 40px)}
+.wall{left:0;right:0;top:11%;bottom:38%;background:#dfe3ea}
+.floor{left:0;right:0;top:62%;bottom:0;background:#9ba1ae}
+.board{left:11%;right:11%;top:11%;height:44%;background:#f7f8fa;border:6px solid #b7bdc9;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:1.5%;gap:2px}
+.board h2{margin:0;font-size:clamp(1rem,3.6vw,1.7rem)}.board p{margin:0;font-size:clamp(.65rem,1.9vw,.95rem)}.board em{font-style:normal;color:#3b6fd4;font-size:clamp(.65rem,1.9vw,.9rem)}
+.table{left:0;right:0;bottom:0;height:24%;background:linear-gradient(#eef0f4 0 18%,#c3c8d2 18% 100%);border-top:5px solid #fff;z-index:3}
+.monitor{position:absolute;left:50%;transform:translateX(-50%);bottom:21%;width:55%;aspect-ratio:540/380;background:url('/assets/laptop_back.png') center/contain no-repeat;image-rendering:pixelated;z-index:4}
+.seat{top:0;bottom:0;width:30%;pointer-events:none}
+.seat.left{left:1%}.seat.center{left:35%}.seat.right{right:1%}
+.sprite{position:absolute;left:0;bottom:20%;width:100%;z-index:2}
+.sprite.speaking{animation:bob .6s infinite}
+.sprite.hit{animation:shake .25s 4;filter:sepia(1) saturate(5) hue-rotate(-40deg)}
+.nameplate{position:absolute;left:4%;right:4%;bottom:5%;z-index:5;text-align:center;background:#fff;border:3px solid var(--ink);padding:2px 4px;font-size:clamp(.6rem,1.8vw,.85rem);line-height:1.3}
+.nameplate.pro{background:#dce9ff}.nameplate.con{background:#ffe0e0}.nameplate.empty{bottom:8%;color:#888}
+.bubble{position:absolute;left:0;right:0;bottom:60%;z-index:6;background:#fff;border:3px solid var(--ink);padding:4px 6px;font-size:clamp(.6rem,1.8vw,.8rem);word-break:keep-all}
+.bubble.alert{background:#ffe1e1;border-color:var(--red)}
+.hit-star{position:absolute;left:38%;bottom:54%;font-size:2rem;z-index:7}
+.hud{left:8px;top:6px;z-index:10;background:#fff;border:3px solid var(--ink);padding:2px 8px;font-size:.8rem}
+.scene .scene-rules{position:absolute;right:8px;top:6px;z-index:10;padding:0 10px}
+.fx-banner{position:absolute;left:50%;top:40%;z-index:20;font-size:clamp(1.8rem,7vw,3.2rem);color:#fff;text-shadow:4px 4px 0 var(--ink),-2px -2px 0 var(--ink);animation:pop .4s both;white-space:nowrap}
+@keyframes bob{50%{transform:translateY(-6px)}}
+@keyframes shake{20%{transform:translateX(-10px) rotate(-4deg)}60%{transform:translateX(10px) rotate(4deg)}}
+@keyframes pop{0%{transform:translate(-50%,-50%) scale(.3);opacity:0}100%{transform:translate(-50%,-50%) scale(1);opacity:1}}
+/* 인게임 하단 패널 */
+.panel{display:grid;grid-template-columns:150px 1fr;gap:10px;margin-top:10px}
+.side{display:flex;flex-direction:column;gap:8px}
+.hand{display:flex;flex-direction:column;gap:6px}
+.hand-card{font:inherit;cursor:pointer;background:#fff7e8;border:3px solid var(--ink);padding:6px}
+.hand-card.sel{background:var(--orange);transform:translateX(4px)}
+.hand-card.used{text-decoration:line-through;opacity:.4}
+.main{display:flex;flex-direction:column;min-width:0}
+.log{height:220px;overflow:auto;background:#fff;border:3px solid var(--ink);padding:8px}
+.msg{margin-bottom:4px;word-break:break-all}.msg.sys{text-align:center;color:#777;font-size:.85rem}
+.msg .pro{color:#2f5fc4}.msg .con{color:var(--red)}.kw{color:#a35d00}
+.actions{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin:8px 0;min-height:48px}
+.chat-input{display:flex;gap:6px}.chat-input input{flex:1;min-width:0}
+/* 결과 */
+.result{text-align:center}.big-number{font-size:5rem;color:var(--orange);text-shadow:4px 4px 0 var(--ink)}.big-number small{font-size:1.4rem;color:var(--ink);text-shadow:none}
+.result .row{justify-content:center}
+/* 공통 */
+.toast{position:fixed;left:50%;top:16px;transform:translateX(-50%);z-index:200;background:#fff3cd;border:3px solid var(--ink);padding:8px 16px;cursor:pointer}
+.devbar{position:fixed;left:8px;bottom:8px;z-index:60;background:#000c;color:#fff;padding:6px 8px;font-size:.75rem;display:flex;gap:4px;flex-wrap:wrap;align-items:center;max-width:60vw}
+.devbar button{font:inherit;cursor:pointer}.devbar .on{background:var(--orange)}
+@media(max-width:560px){.panel{grid-template-columns:1fr}.hand{flex-direction:row;flex-wrap:wrap}.zones{grid-template-columns:1fr}.devbar{bottom:78px}}
+@media(prefers-reduced-motion:reduce){.sprite.speaking,.sprite.hit,.fx-banner{animation:none}}

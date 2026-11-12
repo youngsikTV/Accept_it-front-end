@@ -1,0 +1,16 @@
+# Gradle (백엔드)
+.gradle/
+build/
+
+# 프론트엔드
+frontend/node_modules/
+frontend/dist/
+frontend/.env
+frontend/.env.local
+
+# IDE / OS
+.idea/
+.vscode/
+*.iml
+.DS_Store
+Thumbs.db
