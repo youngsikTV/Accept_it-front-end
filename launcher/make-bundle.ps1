@@ -70,9 +70,18 @@ $my = Join-Path $rt 'mysql'
 Remove-Item (Join-Path $my 'docs'), (Join-Path $my 'include') -Recurse -Force -ErrorAction SilentlyContinue
 Get-ChildItem $my -Recurse -Include *.pdb, *.lib, mysqld-debug.exe -ErrorAction SilentlyContinue | Remove-Item -Force -ErrorAction SilentlyContinue
 
+Write-Host "`n[3.5/5] cloudflared 준비 (와이파이가 달라도 접속하는 '인터넷 공개' 기능용, 실패해도 계속 진행)"
+try {
+  $cf = Join-Path $dl 'cloudflared.exe'
+  Get-File @('https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-windows-amd64.exe') $cf 5
+  Copy-Item $cf (Join-Path $rt 'cloudflared.exe') -Force
+} catch { Write-Host "  cloudflared 를 받지 못했습니다. 같은 와이파이에서만 쓸 수 있습니다. ($($_.Exception.Message))" }
+
 Write-Host "`n[4/5] 실행 파일 복사"
 Copy-Item (Join-Path $here 'AcceptIt.exe') $out -Force
 Copy-Item (Join-Path $here 'items.txt') (Join-Path $out 'items.txt') -Force
+Copy-Item (Join-Path $here 'AcceptIt-public.bat') $out -Force
+Copy-Item (Join-Path $here 'keywords.txt') (Join-Path $out 'keywords.txt') -Force
 
 Write-Host "`n[5/5] 압축 (AcceptIt.zip)"
 $zip = Join-Path $root 'dist\AcceptIt.zip'

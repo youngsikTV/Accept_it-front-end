@@ -3,7 +3,6 @@
 package main
 
 import (
-	"bufio"
 	"crypto/rand"
 	"embed"
 	"encoding/hex"
@@ -19,6 +18,7 @@ import (
 	"os/signal"
 	"path/filepath"
 	"runtime"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -28,9 +28,13 @@ import (
 var webFS embed.FS
 
 const (
-	uiPort      = "5173"
-	backendURL  = "http://127.0.0.1:8080"
 	containerDB = "AcceptIt_db" // docker-compose.yml 의 container_name
+)
+
+// 포트는 기본값에서 시작하며, 설치 없는 모드에서는 사용 중이면 빈 포트로 자동 변경됩니다.
+var (
+	uiPort     = "5173"
+	backendURL = "http://127.0.0.1:8080"
 )
 
 func fail(format string, a ...any) {
@@ -135,9 +139,7 @@ func dockerOut(args ...string) string {
 }
 
 func ask(q string) bool {
-	fmt.Printf("\n%s (Y/N): ", q)
-	s, _ := bufio.NewReader(os.Stdin).ReadString('\n')
-	s = strings.ToLower(strings.TrimSpace(s))
+	s := strings.ToLower(readLine("\n" + q + " (Y/N): "))
 	return s == "y" || s == "yes" || s == "ㅛ"
 }
 
@@ -164,12 +166,26 @@ func healthy() bool {
 }
 
 func portBusy(port string) bool {
+	if tcpOpen("127.0.0.1:" + port) { // 127.0.0.1 에만 열린 프로그램도 감지
+		return true
+	}
 	l, err := net.Listen("tcp", ":"+port)
 	if err != nil {
 		return true
 	}
 	l.Close()
 	return false
+}
+
+// freePort: start 부터 위로 올라가며 비어 있는 포트를 찾습니다.
+func freePort(start int) string {
+	for p := start; p < start+300; p++ {
+		if s := strconv.Itoa(p); !portBusy(s) {
+			return s
+		}
+	}
+	fail("%d 번 이후로 비어 있는 포트를 찾지 못했습니다.", start)
+	return ""
 }
 
 // 다른 프로젝트의 컨테이너가 3307/8080 을 쓰고 있으면 (사용자 동의 후) 잠시 멈춥니다. 삭제는 하지 않습니다.
@@ -245,6 +261,15 @@ func startDB(root string, env map[string]string) {
 	})
 }
 
+// dockerMySQL: Docker 의 MySQL 컨테이너에 SQL 을 실행합니다.
+func dockerMySQL(env map[string]string, sql string) (string, error) {
+	c := exec.Command("docker", "exec", "-i", containerDB, "mysql", "-uroot", "-p"+env["DB_ROOT_PASSWORD"],
+		"--default-character-set=utf8mb4", env["DB_NAME"])
+	c.Stdin = strings.NewReader(sql)
+	out, err := c.CombinedOutput()
+	return string(out), err
+}
+
 func syncItems(root string, env map[string]string, items []Item) error {
 	c := exec.Command("docker", "exec", "-i", containerDB, "mysql", "-uroot", "-p"+env["DB_ROOT_PASSWORD"],
 		"--default-character-set=utf8mb4", env["DB_NAME"])
@@ -278,6 +303,7 @@ func loadItems(root string) []Item {
 		fail("%v", err)
 	}
 	fmt.Printf("  %s 에서 물품 %d개를 읽었습니다.\n", path, len(items))
+	loadKeywords(root)
 	return items
 }
 
@@ -318,7 +344,11 @@ func cleanupAll() {
 	}
 }
 
-func installExitHandlers() {
+var exitOnce sync.Once
+
+func installExitHandlers() { exitOnce.Do(installExitHandlersOnce) }
+
+func installExitHandlersOnce() {
 	stop := make(chan os.Signal, 1)
 	signal.Notify(stop, os.Interrupt)
 	go func() { <-stop; fmt.Println("\n종료하는 중..."); cleanupAll(); os.Exit(0) }()
@@ -347,15 +377,45 @@ func waitBackend(be *exec.Cmd, logPath string) {
 	fmt.Println("\n  백엔드 준비 완료")
 }
 
-// serveUI: 내장된 게임 화면을 :5173 에 제공하고 /api, /ws 는 백엔드(:8080)로 넘깁니다.
-func serveUI(noOpen bool) {
+// newLocalProxy: 이 컴퓨터의 백엔드로 보내는 프록시.
+// 백엔드의 WebSocket 설정 중 한 곳이 Origin 을 http://localhost:5173 으로만 허용합니다.
+// 포트가 바뀌거나 다른 컴퓨터에서 접속해도 연결되도록 /ws 요청의 Origin 을 맞춰 줍니다. (백엔드 소스는 그대로)
+func newLocalProxy(target *url.URL) *httputil.ReverseProxy {
+	proxy := httputil.NewSingleHostReverseProxy(target)
+	proxy.ModifyResponse = snoopRoomCode
+	dir := proxy.Director
+	proxy.Director = func(r *http.Request) {
+		dir(r)
+		if strings.HasPrefix(r.URL.Path, "/ws/") {
+			r.Header.Set("Origin", "http://localhost:5173")
+		}
+	}
+	return proxy
+}
+
+// startUI: 내장된 게임 화면을 :5173(사용 중이면 다른 포트)에 제공합니다. (바로 돌아옴)
+//   - /api, /ws 는 이 컴퓨터의 백엔드로 보내되, 다른 컴퓨터의 방 코드면 그 방장 컴퓨터로 대신 전달합니다. (route.go)
+//   - 같은 네트워크의 다른 컴퓨터가 방장을 찾을 때 응답합니다. (discovery.go)
+func startUI(noOpen bool) {
+	if portBusy(uiPort) {
+		old := uiPort
+		n, _ := strconv.Atoi(uiPort)
+		uiPort = freePort(n + 1)
+		fmt.Printf("  화면 포트 %s 는 사용 중이라 %s 번으로 엽니다.\n", old, uiPort)
+	}
 	sub, _ := fs.Sub(webFS, "web")
 	target, _ := url.Parse(backendURL)
-	proxy := httputil.NewSingleHostReverseProxy(target)
+	proxy := newLocalProxy(target)
+	api := apiHandler(proxy)
+	go serveDiscovery(discPort, uiPort)
 	mux := http.NewServeMux()
-	mux.Handle("/api/", proxy)
-	mux.Handle("/ws/", proxy)
+	mux.Handle("/api/", api)
+	mux.Handle("/ws/", api)
 	files := http.FileServer(http.FS(sub))
+	idx, _ := fs.ReadFile(sub, "index.html")
+	indexHTML := injectBanner(idx) // 방장 컴퓨터 메인 화면에 '같이 하기 주소' 상자를 끼워 넣음
+	mux.HandleFunc("/__acceptit/info", infoHandler)
+	mux.HandleFunc("/__acceptit/banner.js", bannerHandler)
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/" {
 			if f, err := sub.Open(strings.TrimPrefix(r.URL.Path, "/")); err == nil {
@@ -364,23 +424,33 @@ func serveUI(noOpen bool) {
 				return
 			}
 		}
-		r.URL.Path = "/" // /room /game /result 새로고침 대응
-		files.ServeHTTP(w, r)
+		// /room /game /result 새로고침 대응
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		w.Header().Set("Cache-Control", "no-store")
+		_, _ = w.Write(indexHTML)
 	})
-	addr := "http://localhost:" + uiPort
-	fmt.Printf("\n게임 주소: %s\n(같은 와이파이의 다른 사람은 이 컴퓨터 IP:%s 로 접속)\n끝내려면 이 창에서 Ctrl+C 또는 창 닫기\n", addr, uiPort)
-	if !noOpen {
-		switch runtime.GOOS {
-		case "windows":
-			_ = exec.Command("rundll32", "url.dll,FileProtocolHandler", addr).Start()
-		case "darwin":
-			_ = exec.Command("open", addr).Start()
-		}
-	}
-	if err := http.ListenAndServe(":"+uiPort, mux); err != nil {
-		cleanupAll()
+	ln, err := net.Listen("tcp", ":"+uiPort)
+	if err != nil {
 		fail("화면 서버 시작 실패 (포트 %s 사용 중?): %v", uiPort, err)
 	}
+	go func() { _ = http.Serve(ln, mux) }()
+	addr := "http://localhost:" + uiPort
+	fmt.Printf("\n게임 주소: %s\n끝내려면 이 창에서 Ctrl+C 또는 창 닫기\n", addr)
+	printShareInfo()
+	if !noOpen {
+		openBrowser(addr)
+	}
+	if publicMode {
+		installExitHandlers()
+		go startTunnel(uiPort)
+	}
+}
+
+// serveUI: 화면을 열고 이 컴퓨터의 서버가 준비되었음을 알린 뒤 계속 실행합니다. (Docker 모드용)
+func serveUI(noOpen bool) {
+	startUI(noOpen)
+	localReady.Store(true)
+	select {}
 }
 
 func runDocker(syncOnly, noOpen bool) {
@@ -400,6 +470,7 @@ func runDocker(syncOnly, noOpen bool) {
 			fail("물품 반영 실패: %v", err)
 		}
 		fmt.Println("  물품 목록을 DB에 반영했습니다.")
+		applyKeywords(func(sql string) (string, error) { return dockerMySQL(env, sql) })
 		return
 	}
 
@@ -441,6 +512,7 @@ func runDocker(syncOnly, noOpen bool) {
 		fail("물품 반영 실패: %v", err)
 	}
 	fmt.Printf("  물품 %d개 반영 완료. 게임 시작 때 이 목록에서 무작위로 출제됩니다.\n", len(items))
+	applyKeywords(func(sql string) (string, error) { return dockerMySQL(env, sql) })
 	serveUI(noOpen)
 }
 
@@ -448,9 +520,28 @@ func main() {
 	syncOnly := flag.Bool("sync-only", false, "물품 목록만 DB에 반영하고 종료 (서버가 이미 켜져 있을 때)")
 	noOpen := flag.Bool("no-browser", false, "브라우저를 자동으로 열지 않음")
 	forceDocker := flag.Bool("docker", false, "runtime 폴더가 있어도 Docker 모드로 실행")
+	menu := flag.Bool("menu", false, "시작할 때 방장/참가자 선택 메뉴를 보여 줌 (보통은 필요 없음)")
+	public := flag.Bool("public", false, "인터넷 공개: 와이파이가 달라도 접속할 수 있는 주소를 만듭니다 (cloudflared 필요)")
+	join := flag.String("join", "", "참가자로 접속할 방장 컴퓨터 주소 (예: 192.168.0.12:5173)")
 	flag.Parse()
 
 	fmt.Println("=== ACCEPT IT 실행기 ===")
+	publicMode = *public
+	role := "host" // 기본: 모두 같은 방식으로 실행. 화면의 Host/Join 과 방 코드로 자동 연결됩니다.
+	switch {
+	case *join != "":
+		role = "join"
+	case *menu && !*syncOnly:
+		role = chooseRole()
+	}
+	switch role {
+	case "join":
+		runJoin(*join, *noOpen)
+		return
+	case "join-auto":
+		runJoinAuto(*noOpen)
+		return
+	}
 	if !*forceDocker {
 		if base := portableBase(); base != "" {
 			runPortable(base, *syncOnly, *noOpen)
