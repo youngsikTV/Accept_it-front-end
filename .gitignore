@@ -51,3 +51,10 @@ frontend/coverage/
 ### draw.io backup files ###
 .$*.bkp
 .$*.dtmp
+
+### ACCEPT IT launcher (생성물 / 실행 데이터) ###
+/dist/
+/runtime/
+/data/
+/launcher/runtime/
+/launcher/data/
